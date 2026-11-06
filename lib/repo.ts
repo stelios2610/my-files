@@ -14,6 +14,8 @@ import type {
   MenuCategory,
   MenuGroup,
   ShiftInfo,
+  StaffMember,
+  StaffRole,
   Ticket,
   TicketLine,
 } from "./types";
@@ -55,6 +57,22 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function activeStaff(db: DB, staffId: string, companyId: string): { id: string; name: string } {
+  const staff = one<{ id: string; name: string; company_id: string; active: number }>(
+    db,
+    "SELECT id, name, company_id, active FROM staff WHERE id = ?",
+    staffId,
+  );
+  if (!staff || staff.active !== 1 || staff.company_id !== companyId) {
+    throw new BusinessError("Ο κωδικός δεν ισχύει.");
+  }
+  return { id: staff.id, name: staff.name };
+}
+
+function assertPin(pin: string) {
+  if (!/^\d{4}$/.test(pin)) throw new BusinessError("Ο κωδικός είναι 4 ψηφία.");
+}
+
 function changesOf(result: { changes: number | bigint }): number {
   return Number(result.changes);
 }
@@ -93,9 +111,9 @@ export function getFloor(db: DB, companyId: string): FloorArea[] {
      ORDER BY t.position`,
     companyId,
   );
-  const openDocs = many<{ id: string; table_id: string; opened_at: string }>(
+  const openDocs = many<{ id: string; table_id: string; opened_at: string; opened_by_name: string | null }>(
     db,
-    "SELECT id, table_id, opened_at FROM document WHERE company_id = ? AND status = 'open' AND table_id IS NOT NULL",
+    "SELECT id, table_id, opened_at, opened_by_name FROM document WHERE company_id = ? AND status = 'open' AND table_id IS NOT NULL",
     companyId,
   );
   const docIds = openDocs.map((doc) => doc.id);
@@ -143,6 +161,7 @@ export function getFloor(db: DB, companyId: string): FloorArea[] {
           gross: total?.gross ?? (doc ? 0 : null),
           itemCount: total?.count ?? 0,
           openedMinutes: doc ? minutesOpen(doc.opened_at) : null,
+          openedBy: doc?.opened_by_name ?? null,
         };
       }),
   }));
@@ -254,7 +273,7 @@ export function getShiftReport(db: DB, shiftId: string): ShiftReport | null {
   };
 }
 
-export function openTable(db: DB, tableId: string): { documentId: string; tableId: string } {
+export function openTable(db: DB, tableId: string, staffId: string): { documentId: string; tableId: string } {
   return transaction(db, () => {
     const table = one<{ id: string; company_id: string }>(
       db,
@@ -265,6 +284,7 @@ export function openTable(db: DB, tableId: string): { documentId: string; tableI
       tableId,
     );
     if (!table) throw new BusinessError("Δεν υπάρχει αυτό το τραπέζι.");
+    const staff = activeStaff(db, staffId, table.company_id);
     const existing = one<{ id: string }>(
       db,
       "SELECT id FROM document WHERE table_id = ? AND status = 'open'",
@@ -283,9 +303,9 @@ export function openTable(db: DB, tableId: string): { documentId: string; tableI
     const documentId = randomUUID();
     db.prepare(
       `INSERT INTO document (
-        id, company_id, series_id, number, doc_type, status, table_id, shift_id, opened_at
-      ) VALUES (?, ?, ?, ?, 'order', 'open', ?, ?, ?)`,
-    ).run(documentId, table.company_id, series.id, series.next_number, tableId, shift.id, nowIso());
+        id, company_id, series_id, number, doc_type, status, table_id, shift_id, opened_by, opened_by_name, opened_at
+      ) VALUES (?, ?, ?, ?, 'order', 'open', ?, ?, ?, ?, ?)`,
+    ).run(documentId, table.company_id, series.id, series.next_number, tableId, shift.id, staff.id, staff.name, nowIso());
     return { documentId, tableId };
   });
 }
@@ -297,9 +317,10 @@ function loadTicketLines(db: DB, documentId: string): TicketLine[] {
     qty_milli: number;
     unit_price_gross: number;
     vat_rate_bps: number;
+    staff_name: string | null;
   }>(
     db,
-    `SELECT id, name, qty_milli, unit_price_gross, vat_rate_bps
+    `SELECT id, name, qty_milli, unit_price_gross, vat_rate_bps, staff_name
      FROM document_line WHERE document_id = ? ORDER BY position`,
     documentId,
   );
@@ -328,6 +349,7 @@ function loadTicketLines(db: DB, documentId: string): TicketLine[] {
         priceDelta: Number(modifier.price_delta),
       })),
       gross: lineGrossCents(qtyMilli, unitPriceGross, delta),
+      staffName: row.staff_name,
     };
   });
 }
@@ -360,9 +382,9 @@ export function getTicket(db: DB, documentId: string): Ticket | null {
   );
   if (!doc || !doc.table_id) return null;
   const lines = loadTicketLines(db, documentId);
-  const payments = many<{ id: string; method: "cash" | "card"; amount: number }>(
+  const payments = many<{ id: string; method: "cash" | "card"; amount: number; staff_name: string | null }>(
     db,
-    "SELECT id, method, amount FROM payment WHERE document_id = ? ORDER BY paid_at",
+    "SELECT id, method, amount, staff_name FROM payment WHERE document_id = ? ORDER BY paid_at",
     documentId,
   );
   const totals = summarizeLines(lines.map((line) => ({ gross: line.gross, vatRateBps: line.vatRateBps })));
@@ -375,7 +397,12 @@ export function getTicket(db: DB, documentId: string): Ticket | null {
     areaName: doc.area_name,
     openedAt: doc.opened_at,
     lines,
-    payments,
+    payments: payments.map((payment) => ({
+      id: payment.id,
+      method: payment.method,
+      amount: Number(payment.amount),
+      staffName: payment.staff_name,
+    })),
     gross: totals.gross,
     net: totals.net,
     vat: totals.vat,
@@ -463,7 +490,7 @@ function modifierSignature(ids: string[]): string {
   return [...ids].sort().join("|");
 }
 
-export function addLine(db: DB, documentId: string, itemId: string, modifierIds: string[]): { tableId: string } {
+export function addLine(db: DB, documentId: string, itemId: string, modifierIds: string[], staffId: string): { tableId: string } {
   return transaction(db, () => {
     const doc = one<{ id: string; status: string; table_id: string; company_id: string }>(
       db,
@@ -471,6 +498,7 @@ export function addLine(db: DB, documentId: string, itemId: string, modifierIds:
       documentId,
     );
     if (!doc || doc.status !== "open" || !doc.table_id) throw new BusinessError("Η παραγγελία δεν είναι ανοιχτή.");
+    const staff = activeStaff(db, staffId, doc.company_id);
     const item = one<{
       id: string;
       name: string;
@@ -515,9 +543,9 @@ export function addLine(db: DB, documentId: string, itemId: string, modifierIds:
       if (group.required && count !== 1) throw new BusinessError(`Διάλεξε ένα: ${group.name}.`);
     }
     const signature = modifierSignature(chosen.map((modifier) => modifier.id));
-    const existingLines = many<{ id: string; qty_milli: number }>(
+    const existingLines = many<{ id: string; qty_milli: number; staff_id: string | null }>(
       db,
-      "SELECT id, qty_milli FROM document_line WHERE document_id = ? AND item_id = ?",
+      "SELECT id, qty_milli, staff_id FROM document_line WHERE document_id = ? AND item_id = ?",
       documentId,
       itemId,
     );
@@ -528,7 +556,7 @@ export function addLine(db: DB, documentId: string, itemId: string, modifierIds:
         line.id,
       );
       const existingSignature = modifierSignature(mods.map((mod) => mod.modifier_id ?? ""));
-      if (existingSignature === signature) {
+      if (existingSignature === signature && line.staff_id === staff.id) {
         db.prepare("UPDATE document_line SET qty_milli = ? WHERE id = ?").run(line.qty_milli + 1000, line.id);
         return { tableId: doc.table_id };
       }
@@ -540,9 +568,10 @@ export function addLine(db: DB, documentId: string, itemId: string, modifierIds:
     );
     const lineId = randomUUID();
     db.prepare(
-      `INSERT INTO document_line (id, document_id, item_id, name, qty_milli, unit_price_gross, vat_rate_bps, position)
-       VALUES (?, ?, ?, ?, 1000, ?, ?, ?)`,
-    ).run(lineId, documentId, item.id, item.name, item.price_gross, item.rate_bps, position?.next ?? 1);
+      `INSERT INTO document_line (
+        id, document_id, item_id, name, qty_milli, unit_price_gross, vat_rate_bps, position, staff_id, staff_name
+      ) VALUES (?, ?, ?, ?, 1000, ?, ?, ?, ?, ?)`,
+    ).run(lineId, documentId, item.id, item.name, item.price_gross, item.rate_bps, position?.next ?? 1, staff.id, staff.name);
     const insertModifier = db.prepare(
       "INSERT INTO document_line_modifier (id, line_id, modifier_id, name, price_delta) VALUES (?, ?, ?, ?, ?)",
     );
@@ -579,27 +608,24 @@ export function addPayment(
   documentId: string,
   method: "cash" | "card",
   tendered: number,
+  staffId: string,
 ): { tableId: string; change: number } {
   if (method !== "cash" && method !== "card") throw new BusinessError("Άκυρος τρόπος πληρωμής.");
   return transaction(db, () => {
     const ticket = getTicket(db, documentId);
     if (!ticket) throw new BusinessError("Η παραγγελία δεν είναι ανοιχτή.");
-    const doc = one<{ status: string; shift_id: string }>(
+    const doc = one<{ status: string; shift_id: string; company_id: string }>(
       db,
-      "SELECT status, shift_id FROM document WHERE id = ?",
+      "SELECT status, shift_id, company_id FROM document WHERE id = ?",
       documentId,
     );
     if (!doc || doc.status !== "open") throw new BusinessError("Η παραγγελία δεν είναι ανοιχτή.");
+    const staff = activeStaff(db, staffId, doc.company_id);
     const tender = applyTender(ticket.remaining, tendered, method);
     if (!tender.ok) throw new BusinessError(tender.error);
-    db.prepare("INSERT INTO payment (id, document_id, shift_id, method, amount, paid_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-      randomUUID(),
-      documentId,
-      doc.shift_id,
-      method,
-      tender.applied,
-      nowIso(),
-    );
+    db.prepare(
+      "INSERT INTO payment (id, document_id, shift_id, method, amount, paid_at, staff_id, staff_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(randomUUID(), documentId, doc.shift_id, method, tender.applied, nowIso(), staff.id, staff.name);
     return { tableId: ticket.tableId, change: tender.change };
   });
 }
@@ -1021,4 +1047,95 @@ export function exportRows(db: DB, companyId: string): ExportRow[] {
       fiscal: doc.fiscalStatus === "sent" ? "σημάνθηκε" : "εκκρεμεί",
     };
   });
+}
+
+function mapStaff(row: { id: string; name: string; pin: string; role: string }): StaffMember {
+  return { id: row.id, name: row.name, pin: row.pin, role: row.role === "cashier" ? "cashier" : "waiter" };
+}
+
+export function staffByPin(db: DB, companyId: string, pin: string): StaffMember | null {
+  const row = one<{ id: string; name: string; pin: string; role: string }>(
+    db,
+    "SELECT id, name, pin, role FROM staff WHERE company_id = ? AND pin = ? AND active = 1",
+    companyId,
+    pin,
+  );
+  return row ? mapStaff(row) : null;
+}
+
+export function createStaffSession(db: DB, staffId: string): string {
+  const token = randomUUID();
+  db.prepare("INSERT INTO staff_session (token, staff_id, created_at) VALUES (?, ?, ?)").run(token, staffId, nowIso());
+  return token;
+}
+
+export function staffBySession(db: DB, token: string): StaffMember | null {
+  const row = one<{ id: string; name: string; pin: string; role: string }>(
+    db,
+    `SELECT s.id, s.name, s.pin, s.role
+     FROM staff_session session
+     JOIN staff s ON s.id = session.staff_id
+     WHERE session.token = ? AND s.active = 1`,
+    token,
+  );
+  return row ? mapStaff(row) : null;
+}
+
+export function deleteSession(db: DB, token: string): void {
+  db.prepare("DELETE FROM staff_session WHERE token = ?").run(token);
+}
+
+export function listStaff(db: DB, companyId: string): StaffMember[] {
+  return many<{ id: string; name: string; pin: string; role: string }>(
+    db,
+    "SELECT id, name, pin, role FROM staff WHERE company_id = ? AND active = 1 ORDER BY role DESC, name",
+    companyId,
+  ).map(mapStaff);
+}
+
+export function demoPins(db: DB): { name: string; pin: string }[] | null {
+  const expected = [
+    { id: "staff_maria", name: "Μαρία", pin: "2580" },
+    { id: "staff_nikos", name: "Νίκος", pin: "1470" },
+    { id: "staff_till", name: "Ταμείο", pin: "3690" },
+  ];
+  const rows = many<{ id: string; pin: string }>(
+    db,
+    `SELECT id, pin FROM staff WHERE id IN (${expected.map(() => "?").join(",")})`,
+    ...expected.map((person) => person.id),
+  );
+  if (rows.length !== expected.length) return null;
+  if (!expected.every((person) => rows.some((row) => row.id === person.id && row.pin === person.pin))) return null;
+  return expected.map((person) => ({ name: person.name, pin: person.pin }));
+}
+
+export function changeStaffPin(db: DB, staffId: string, pin: string): void {
+  assertPin(pin);
+  const staff = one<{ company_id: string }>(db, "SELECT company_id FROM staff WHERE id = ? AND active = 1", staffId);
+  if (!staff) throw new BusinessError("Δεν υπάρχει αυτό το άτομο.");
+  const taken = one<{ id: string }>(
+    db,
+    "SELECT id FROM staff WHERE company_id = ? AND pin = ? AND id <> ?",
+    staff.company_id,
+    pin,
+    staffId,
+  );
+  if (taken) throw new BusinessError("Αυτός ο κωδικός χρησιμοποιείται.");
+  db.prepare("UPDATE staff SET pin = ? WHERE id = ?").run(pin, staffId);
+}
+
+export function createStaff(db: DB, companyId: string, name: string, pin: string, role: StaffRole): void {
+  const cleanName = name.trim();
+  if (cleanName.length < 2 || cleanName.length > 40) throw new BusinessError("Γράψε όνομα, μέχρι 40 γράμματα.");
+  assertPin(pin);
+  if (role !== "waiter" && role !== "cashier") throw new BusinessError("Άκυρος ρόλος.");
+  const taken = one<{ id: string }>(db, "SELECT id FROM staff WHERE company_id = ? AND pin = ?", companyId, pin);
+  if (taken) throw new BusinessError("Αυτός ο κωδικός χρησιμοποιείται.");
+  db.prepare("INSERT INTO staff (id, company_id, name, pin, role, active) VALUES (?, ?, ?, ?, ?, 1)").run(
+    randomUUID(),
+    companyId,
+    cleanName,
+    pin,
+    role,
+  );
 }

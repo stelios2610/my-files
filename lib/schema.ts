@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS document (
   status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'void')),
   table_id TEXT REFERENCES dining_table(id),
   shift_id TEXT REFERENCES shift(id),
+  opened_by TEXT,
+  opened_by_name TEXT,
   opened_at TEXT NOT NULL,
   closed_at TEXT,
   UNIQUE (series_id, number)
@@ -113,7 +115,9 @@ CREATE TABLE IF NOT EXISTS document_line (
   qty_milli INTEGER NOT NULL,
   unit_price_gross INTEGER NOT NULL,
   vat_rate_bps INTEGER NOT NULL,
-  position INTEGER NOT NULL
+  position INTEGER NOT NULL,
+  staff_id TEXT,
+  staff_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS document_line_modifier (
@@ -130,7 +134,9 @@ CREATE TABLE IF NOT EXISTS payment (
   shift_id TEXT NOT NULL REFERENCES shift(id),
   method TEXT NOT NULL CHECK (method IN ('cash', 'card')),
   amount INTEGER NOT NULL,
-  paid_at TEXT NOT NULL
+  paid_at TEXT NOT NULL,
+  staff_id TEXT,
+  staff_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stock_movement (
@@ -151,6 +157,22 @@ CREATE TABLE IF NOT EXISTS fiscal_handoff (
   status TEXT NOT NULL CHECK (status IN ('pending', 'sent')),
   created_at TEXT NOT NULL,
   sent_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS staff (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES company(id),
+  name TEXT NOT NULL,
+  pin TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('waiter', 'cashier')),
+  active INTEGER NOT NULL DEFAULT 1,
+  UNIQUE (company_id, pin)
+);
+
+CREATE TABLE IF NOT EXISTS staff_session (
+  token TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL REFERENCES staff(id),
+  created_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS document_company_status ON document(company_id, status);

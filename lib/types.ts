@@ -7,6 +7,7 @@ export type FloorTable = {
   gross: number | null;
   itemCount: number;
   openedMinutes: number | null;
+  openedBy: string | null;
 };
 
 export type FloorArea = {
@@ -56,12 +57,23 @@ export type TicketLine = {
   vatRateBps: number;
   modifiers: TicketModifier[];
   gross: number;
+  staffName: string | null;
 };
 
 export type PaymentRow = {
   id: string;
   method: "cash" | "card";
   amount: number;
+  staffName: string | null;
+};
+
+export type StaffRole = "waiter" | "cashier";
+
+export type StaffMember = {
+  id: string;
+  name: string;
+  pin: string;
+  role: StaffRole;
 };
 
 export type Ticket = {

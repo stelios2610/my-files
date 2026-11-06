@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { getDb } from "@/lib/db";
-import { formatEuro, formatTime } from "@/lib/money";
-import { getCompany, getOpenShift, pendingFiscalCount } from "@/lib/repo";
-import { Nav } from "@/components/nav";
+import { getCompany } from "@/lib/repo";
 
 const sans = Source_Sans_3({
   subsets: ["latin", "greek"],
@@ -27,33 +24,9 @@ export function generateMetadata(): Metadata {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const db = getDb();
-  const company = getCompany(db);
-  const shift = getOpenShift(db, company.id);
-  const pending = pendingFiscalCount(db, company.id);
   return (
     <html lang="el" className={`${sans.variable} ${serif.variable}`}>
-      <body>
-        <div className="app">
-          <header className="topbar">
-            <Link href="/" className="brand">
-              <strong>{company.name}</strong>
-              <span>Όροφος · αποθήκη · βάρδια</span>
-            </Link>
-            <Nav pending={pending} />
-            <div className="shift-pill">
-              {shift ? (
-                <>
-                  <em>Βάρδια ανοιχτή</em> από {formatTime(shift.openedAt)} · ταμείο {formatEuro(shift.openingFloat)}
-                </>
-              ) : (
-                <Link href="/shift">Χωρίς βάρδια</Link>
-              )}
-            </div>
-          </header>
-          {children}
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

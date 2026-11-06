@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { currentStaff } from "@/lib/auth";
 import { formatDateTime } from "@/lib/money";
 import { getDb } from "@/lib/db";
 import { exportRows, getCompany } from "@/lib/repo";
@@ -13,7 +15,8 @@ function euro(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
 
-export function GET() {
+export async function GET() {
+  if (!(await currentStaff())) redirect("/login");
   const db = getDb();
   const company = getCompany(db);
   const rows = exportRows(db, company.id);

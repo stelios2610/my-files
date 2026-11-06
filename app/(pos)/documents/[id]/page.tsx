@@ -49,6 +49,7 @@ export default async function DocumentPage({
                 <td>
                   {line.qtyMilli / 1000} × {line.name}
                   {line.modifiers.length > 0 ? <div>{line.modifiers.map((modifier) => modifier.name).join(", ")}</div> : null}
+                  {line.staffName ? <div>{line.staffName}</div> : null}
                 </td>
                 <td className="num">{formatEuro(line.gross)}</td>
               </tr>

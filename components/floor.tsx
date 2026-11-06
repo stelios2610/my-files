@@ -25,7 +25,9 @@ export function Floor({ areas, shiftOpen }: { areas: FloorArea[]; shiftOpen: boo
                 <button className={table.documentId ? "table-card open" : "table-card"} disabled={pending} type="submit">
                   <strong>{table.name}</strong>
                   <span className="meta">
-                    {table.documentId ? `${table.itemCount} είδη · ${table.openedMinutes ?? 0}′` : "Ελεύθερο"}
+                    {table.documentId
+                      ? `${table.openedBy ? `${table.openedBy} · ` : ""}${table.itemCount} είδη · ${table.openedMinutes ?? 0}′`
+                      : "Ελεύθερο"}
                   </span>
                   {table.documentId ? <span className="amount">{formatEuro(table.gross ?? 0)}</span> : null}
                 </button>

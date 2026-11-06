@@ -16,11 +16,12 @@ function current(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Nav({ pending }: { pending: number }) {
+export function Nav({ pending, showCodes }: { pending: number; showCodes: boolean }) {
   const pathname = usePathname();
+  const items = showCodes ? [...links, { href: "/staff", label: "Κωδικοί" }] : links;
   return (
     <nav className="nav">
-      {links.map((link) => (
+      {items.map((link) => (
         <Link key={link.href} href={link.href} aria-current={current(pathname, link.href) ? "page" : undefined}>
           {link.label}
           {link.href === "/documents" && pending > 0 ? <span className="badge">{pending}</span> : null}

@@ -169,6 +169,25 @@ const recipes: { parentId: string; ingredientId: string; qtyMilli: number }[] = 
   { parentId: "item_ouzo", ingredientId: "item_ouzo_bulk", qtyMilli: 50 },
 ];
 
+const seedStaff = [
+  { id: "staff_maria", name: "Μαρία", pin: "2580", role: "waiter" },
+  { id: "staff_nikos", name: "Νίκος", pin: "1470", role: "waiter" },
+  { id: "staff_till", name: "Ταμείο", pin: "3690", role: "cashier" },
+] as const;
+
+function insertSeedStaff(db: DB) {
+  const insert = db.prepare("INSERT INTO staff (id, company_id, name, pin, role, active) VALUES (?, ?, ?, ?, ?, 1)");
+  for (const person of seedStaff) insert.run(person.id, COMPANY_ID, person.name, person.pin, person.role);
+}
+
+export function seedStaffIfMissing(db: DB): void {
+  const company = db.prepare("SELECT COUNT(*) AS count FROM company").get() as { count: number } | undefined;
+  if (Number(company?.count ?? 0) === 0) return;
+  const existing = db.prepare("SELECT COUNT(*) AS count FROM staff").get() as { count: number };
+  if (Number(existing.count) > 0) return;
+  insertSeedStaff(db);
+}
+
 export function seedIfEmpty(db: DB): void {
   const existing = db.prepare("SELECT COUNT(*) AS count FROM company").get() as { count: number };
   if (Number(existing.count) > 0) return;
@@ -267,6 +286,7 @@ export function seedIfEmpty(db: DB): void {
       "order",
       1,
     );
+    insertSeedStaff(db);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");

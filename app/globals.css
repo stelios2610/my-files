@@ -80,10 +80,43 @@ a { color: inherit; }
 }
 .shift-pill {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--muted);
   font-size: 14px;
-  white-space: nowrap;
 }
+.login {
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 24px 16px 48px;
+  text-align: center;
+}
+.brand-mark {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+.pin-pad { width: min(320px, 100%); display: grid; gap: 14px; }
+.pin-dots { display: flex; gap: 12px; justify-content: center; height: 18px; }
+.pin-dots i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+.pin-dots i.on { background: var(--copper); border-color: var(--copper); }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pin-keys button {
+  min-height: 72px;
+  font-size: 28px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.demo-pins { margin-top: 18px; }
 .shift-pill em { color: var(--ok); font-style: normal; font-weight: 650; }
 .page { padding: 22px; max-width: 1280px; margin: 0 auto; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }

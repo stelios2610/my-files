@@ -73,6 +73,7 @@ export default async function TablePage({
                     {line.modifiers.length > 0 ? (
                       <div className="mods">{line.modifiers.map((modifier) => modifier.name).join(" · ")}</div>
                     ) : null}
+                    {line.staffName ? <div className="mods">{line.staffName}</div> : null}
                     <div className="qty">
                       <form action={setLineQtyAction}>
                         <input type="hidden" name="lineId" value={line.id} />
@@ -125,6 +126,7 @@ export default async function TablePage({
                   <div key={payment.id} className="payment">
                     <span>
                       {payment.method === "cash" ? "Μετρητά" : "Κάρτα"} {formatEuro(payment.amount)}
+                      {payment.staffName ? ` · ${payment.staffName}` : ""}
                     </span>
                     <form action={removePaymentAction}>
                       <input type="hidden" name="paymentId" value={payment.id} />
