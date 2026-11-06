@@ -170,14 +170,40 @@ const recipes: { parentId: string; ingredientId: string; qtyMilli: number }[] = 
 ];
 
 const seedStaff = [
-  { id: "staff_maria", name: "Μαρία", pin: "2580", role: "waiter" },
-  { id: "staff_nikos", name: "Νίκος", pin: "1470", role: "waiter" },
-  { id: "staff_till", name: "Ταμείο", pin: "3690", role: "cashier" },
+  { id: "staff_admin", name: "Υπεύθυνος", pin: "8024", role: "admin", permissions: "" },
+  { id: "staff_maria", name: "Μαρία", pin: "2580", role: "waiter", permissions: "order" },
+  { id: "staff_nikos", name: "Νίκος", pin: "1470", role: "waiter", permissions: "order" },
+  { id: "staff_till", name: "Ταμείο", pin: "3690", role: "cashier", permissions: "order,pay,shift,documents" },
 ] as const;
 
 function insertSeedStaff(db: DB) {
-  const insert = db.prepare("INSERT INTO staff (id, company_id, name, pin, role, active) VALUES (?, ?, ?, ?, ?, 1)");
-  for (const person of seedStaff) insert.run(person.id, COMPANY_ID, person.name, person.pin, person.role);
+  const insert = db.prepare(
+    "INSERT INTO staff (id, company_id, name, pin, role, active, permissions) VALUES (?, ?, ?, ?, ?, 1, ?)",
+  );
+  for (const person of seedStaff) {
+    insert.run(person.id, COMPANY_ID, person.name, person.pin, person.role, person.permissions);
+  }
+}
+
+export function ensureAccessModel(db: DB): void {
+  db.exec("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  const done = db.prepare("SELECT value FROM app_meta WHERE key = 'permissions_v1'").get() as { value: string } | undefined;
+  if (!done) {
+    db.prepare("UPDATE staff SET permissions = 'order' WHERE role = 'waiter' AND permissions = ''").run();
+    db.prepare(
+      "UPDATE staff SET permissions = 'order,pay,shift,documents' WHERE role = 'cashier' AND permissions = ''",
+    ).run();
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('permissions_v1', '1')").run();
+  }
+  const company = db.prepare("SELECT id FROM company LIMIT 1").get() as { id: string } | undefined;
+  if (!company) return;
+  const admin = db.prepare("SELECT id FROM staff WHERE role = 'admin' AND active = 1").get();
+  if (admin) return;
+  const pinTaken = db.prepare("SELECT id FROM staff WHERE company_id = ? AND pin = '8024'").get(company.id);
+  const pin = pinTaken ? "8025" : "8024";
+  db.prepare(
+    "INSERT INTO staff (id, company_id, name, pin, role, active, permissions) VALUES (?, ?, ?, ?, 'admin', 1, '')",
+  ).run("staff_admin", company.id, "Υπεύθυνος", pin);
 }
 
 export function seedStaffIfMissing(db: DB): void {

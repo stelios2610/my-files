@@ -1,4 +1,6 @@
 import { adjustStockAction } from "@/lib/actions";
+import { Denied } from "@/components/denied";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { formatDateTime, formatQty } from "@/lib/money";
 import { getCompany, getStock, recentMovements } from "@/lib/repo";
@@ -10,6 +12,7 @@ const reasons: Record<string, string> = {
 };
 
 export default async function StockPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (!(await requirePermission("stock"))) return <Denied />;
   const query = await searchParams;
   const db = getDb();
   const company = getCompany(db);

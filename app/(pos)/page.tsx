@@ -1,8 +1,11 @@
+import { Denied } from "@/components/denied";
 import { Floor } from "@/components/floor";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { getCompany, getFloor, getOpenShift } from "@/lib/repo";
 
-export default function FloorPage() {
+export default async function FloorPage() {
+  if (!(await requirePermission("order"))) return <Denied />;
   const db = getDb();
   const company = getCompany(db);
   const areas = getFloor(db, company.id);

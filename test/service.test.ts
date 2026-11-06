@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BusinessError, addLine, addPayment, changeStaffPin, closeDocument, closeShift, getOpenTicketByTable, getStock, getTicket, markFiscalSent, openShift, openTable, staffByPin, voidDocument } from "../lib/repo";
+import { allows } from "../lib/permissions";
+import { BusinessError, addLine, addPayment, changeStaffPin, closeDocument, closeShift, getOpenTicketByTable, getStock, getTicket, markFiscalSent, openShift, openTable, setStaffPermissions, staffByPin, voidDocument } from "../lib/repo";
 import { seedIfEmpty } from "../lib/seed";
 import { openDatabase } from "../lib/sqlite";
 
@@ -84,4 +85,21 @@ test("two waiters on the same table stay on their own lines", () => {
   assert.equal(staffByPin(db, "co_elia", "0000"), null);
   assert.equal(staffByPin(db, "co_elia", "2580")?.name, "Μαρία");
   assert.throws(() => changeStaffPin(db, "staff_nikos", "2580"), /χρησιμοποιείται/);
+});
+
+test("the admin grants rights and a waiter starts with the floor only", () => {
+  const db = tavern();
+  const maria = staffByPin(db, "co_elia", "2580");
+  const admin = staffByPin(db, "co_elia", "8024");
+  assert.equal(maria?.role, "waiter");
+  assert.deepEqual(maria?.permissions, ["order"]);
+  assert.equal(allows(maria!, "order"), true);
+  assert.equal(allows(maria!, "menu"), false);
+  assert.equal(allows(maria!, "pay"), false);
+  assert.equal(admin?.role, "admin");
+  assert.equal(allows(admin!, "stock"), true);
+  assert.equal(allows(admin!, "documents"), true);
+  setStaffPermissions(db, "staff_maria", ["order", "pay"]);
+  assert.equal(staffByPin(db, "co_elia", "2580")?.permissions.includes("pay"), true);
+  assert.throws(() => setStaffPermissions(db, "staff_admin", []), /υπεύθυνος/);
 });

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { currentStaff } from "@/lib/auth";
+import { allows } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/money";
 import { getDb } from "@/lib/db";
 import { exportRows, getCompany } from "@/lib/repo";
@@ -16,7 +17,9 @@ function euro(cents: number): string {
 }
 
 export async function GET() {
-  if (!(await currentStaff())) redirect("/login");
+  const staff = await currentStaff();
+  if (!staff) redirect("/login");
+  if (!allows(staff, "documents")) redirect("/");
   const db = getDb();
   const company = getCompany(db);
   const rows = exportRows(db, company.id);

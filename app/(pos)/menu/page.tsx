@@ -1,9 +1,12 @@
 import { addRecipeAction, removeRecipeAction, updatePriceAction } from "@/lib/actions";
+import { Denied } from "@/components/denied";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { formatAmountInput, formatQty, formatRate } from "@/lib/money";
 import { getCompany, getMenuAdmin, listIngredients } from "@/lib/repo";
 
 export default async function MenuPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (!(await requirePermission("menu"))) return <Denied />;
   const query = await searchParams;
   const db = getDb();
   const company = getCompany(db);

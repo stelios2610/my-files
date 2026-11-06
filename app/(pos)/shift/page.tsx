@@ -1,9 +1,12 @@
 import { closeShiftAction, openShiftAction } from "@/lib/actions";
+import { Denied } from "@/components/denied";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { formatAmountInput, formatEuro, formatTime } from "@/lib/money";
 import { getCompany, getOpenShift, getShiftReport } from "@/lib/repo";
 
 export default async function ShiftPage({ searchParams }: { searchParams: Promise<{ error?: string; closed?: string }> }) {
+  if (!(await requirePermission("shift"))) return <Denied />;
   const query = await searchParams;
   const db = getDb();
   const company = getCompany(db);

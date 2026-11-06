@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { Denied } from "@/components/denied";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { formatDateTime, formatEuro } from "@/lib/money";
 import { getCompany, listClosedDocuments } from "@/lib/repo";
 
-export default function DocumentsPage() {
+export default async function DocumentsPage() {
+  if (!(await requirePermission("documents"))) return <Denied />;
   const db = getDb();
   const company = getCompany(db);
   const documents = listClosedDocuments(db, company.id);

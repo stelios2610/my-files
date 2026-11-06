@@ -1,7 +1,7 @@
 import "server-only";
 import fs from "node:fs";
 import path from "node:path";
-import { seedIfEmpty, seedStaffIfMissing } from "./seed";
+import { ensureAccessModel, seedIfEmpty, seedStaffIfMissing } from "./seed";
 import { openDatabase, type DB } from "./sqlite";
 
 const globalForDb = globalThis as unknown as { eliaDb?: DB };
@@ -13,6 +13,7 @@ export function getDb(): DB {
     const db = openDatabase(path.join(directory, "elia.sqlite"));
     seedIfEmpty(db);
     seedStaffIfMissing(db);
+    ensureAccessModel(db);
     globalForDb.eliaDb = db;
   }
   return globalForDb.eliaDb;

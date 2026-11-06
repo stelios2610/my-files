@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { markFiscalSentAction } from "@/lib/actions";
+import { Denied } from "@/components/denied";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { formatDateTime, formatEuro, formatRate } from "@/lib/money";
 import { getCompany, getFiscalHandoff, getTicket } from "@/lib/repo";
@@ -12,6 +14,7 @@ export default async function DocumentPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  if (!(await requirePermission("documents"))) return <Denied />;
   const { id } = await params;
   const query = await searchParams;
   const db = getDb();

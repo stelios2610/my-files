@@ -164,9 +164,15 @@ CREATE TABLE IF NOT EXISTS staff (
   company_id TEXT NOT NULL REFERENCES company(id),
   name TEXT NOT NULL,
   pin TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('waiter', 'cashier')),
+  role TEXT NOT NULL CHECK (role IN ('waiter', 'cashier', 'admin')),
   active INTEGER NOT NULL DEFAULT 1,
+  permissions TEXT NOT NULL DEFAULT '',
   UNIQUE (company_id, pin)
+);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS staff_session (

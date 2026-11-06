@@ -22,17 +22,26 @@ import {
   removePayment,
   removeRecipeLine,
   setLineQty,
+  setStaffPermissions,
   staffByPin,
   updateItemPrice,
   voidDocument,
 } from "./repo";
+import { allows, isPermission, type Permission } from "./permissions";
 import type { StaffMember } from "./types";
 
 const pinFailures = new Map<string, { count: number; until: number }>();
 
-async function actor(): Promise<StaffMember> {
+async function actor(permission?: Permission): Promise<StaffMember> {
   const staff = await currentStaff();
   if (!staff) redirect("/login");
+  if (permission && !allows(staff, permission)) throw new BusinessError("Δεν έχεις αυτό το δικαίωμα.");
+  return staff;
+}
+
+async function administrator(): Promise<StaffMember> {
+  const staff = await actor();
+  if (staff.role !== "admin") bounce("/settings", "Μόνο ο υπεύθυνος μοιράζει δικαιώματα.");
   return staff;
 }
 
@@ -55,8 +64,8 @@ export async function openTableAction(
   formData: FormData,
 ): Promise<{ error?: string } | null> {
   const tableId = String(formData.get("tableId") ?? "");
-  const staff = await actor();
   try {
+    const staff = await actor("order");
     openTable(getDb(), tableId, staff.id);
   } catch (error) {
     if (error instanceof BusinessError) return { error: error.message };
@@ -71,8 +80,8 @@ export async function addLineAction(
   itemId: string,
   modifierIds: string[],
 ): Promise<{ error: string } | null> {
-  const staff = await actor();
   try {
+    const staff = await actor("order");
     const result = addLine(getDb(), documentId, itemId, modifierIds, staff.id);
     refresh(result.tableId);
     return null;
@@ -83,11 +92,11 @@ export async function addLineAction(
 }
 
 export async function setLineQtyAction(formData: FormData) {
-  await actor();
   const lineId = String(formData.get("lineId") ?? "");
   const qty = Number(formData.get("qty") ?? "");
   const tableId = String(formData.get("tableId") ?? "");
   try {
+    await actor("order");
     const result = setLineQty(getDb(), lineId, qty);
     refresh(result.tableId);
   } catch (error) {
@@ -104,8 +113,8 @@ export async function addPaymentAction(formData: FormData) {
   const cents = parseEuroToCents(String(formData.get("amount") ?? ""));
   if (method !== "cash" && method !== "card") bounce(`/tables/${tableId}`, "Άκυρος τρόπος πληρωμής.");
   if (cents == null) bounce(`/tables/${tableId}`, "Γράψε ποσό, για παράδειγμα 12,50.");
-  const staff = await actor();
   try {
+    const staff = await actor("pay");
     const result = addPayment(getDb(), documentId, method, cents, staff.id);
     refresh(result.tableId);
     const change = result.change > 0 ? `&change=${result.change}` : "";
@@ -117,10 +126,10 @@ export async function addPaymentAction(formData: FormData) {
 }
 
 export async function removePaymentAction(formData: FormData) {
-  await actor();
   const paymentId = String(formData.get("paymentId") ?? "");
   const tableId = String(formData.get("tableId") ?? "");
   try {
+    await actor("pay");
     const result = removePayment(getDb(), paymentId);
     refresh(result.tableId);
   } catch (error) {
@@ -131,10 +140,10 @@ export async function removePaymentAction(formData: FormData) {
 }
 
 export async function closeDocumentAction(formData: FormData) {
-  await actor();
   const documentId = String(formData.get("documentId") ?? "");
   const tableId = String(formData.get("tableId") ?? "");
   try {
+    await actor("pay");
     closeDocument(getDb(), documentId);
   } catch (error) {
     if (error instanceof BusinessError) bounce(`/tables/${tableId}`, error.message);
@@ -145,10 +154,10 @@ export async function closeDocumentAction(formData: FormData) {
 }
 
 export async function voidDocumentAction(formData: FormData) {
-  await actor();
   const documentId = String(formData.get("documentId") ?? "");
   const tableId = String(formData.get("tableId") ?? "");
   try {
+    await actor("order");
     voidDocument(getDb(), documentId);
   } catch (error) {
     if (error instanceof BusinessError) bounce(`/tables/${tableId}`, error.message);
@@ -159,7 +168,12 @@ export async function voidDocumentAction(formData: FormData) {
 }
 
 export async function openShiftAction(formData: FormData) {
-  await actor();
+  try {
+    await actor("shift");
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/shift", error.message);
+    throw error;
+  }
   const cents = parseEuroToCents(String(formData.get("float") ?? ""));
   if (cents == null) bounce("/shift", "Γράψε το αρχικό ταμείο, για παράδειγμα 150,00.");
   try {
@@ -173,7 +187,12 @@ export async function openShiftAction(formData: FormData) {
 }
 
 export async function closeShiftAction(formData: FormData) {
-  await actor();
+  try {
+    await actor("shift");
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/shift", error.message);
+    throw error;
+  }
   const cents = parseEuroToCents(String(formData.get("counted") ?? ""));
   if (cents == null) bounce("/shift", "Γράψε τα μετρητά που μέτρησες.");
   try {
@@ -187,9 +206,9 @@ export async function closeShiftAction(formData: FormData) {
 }
 
 export async function markFiscalSentAction(formData: FormData) {
-  await actor();
   const documentId = String(formData.get("documentId") ?? "");
   try {
+    await actor("documents");
     markFiscalSent(getDb(), documentId);
   } catch (error) {
     if (error instanceof BusinessError) bounce(`/documents/${documentId}`, error.message);
@@ -200,7 +219,12 @@ export async function markFiscalSentAction(formData: FormData) {
 }
 
 export async function updatePriceAction(formData: FormData) {
-  await actor();
+  try {
+    await actor("menu");
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/menu", error.message);
+    throw error;
+  }
   const itemId = String(formData.get("itemId") ?? "");
   const cents = parseEuroToCents(String(formData.get("price") ?? ""));
   if (cents == null) bounce("/menu", "Άκυρη τιμή.");
@@ -215,7 +239,12 @@ export async function updatePriceAction(formData: FormData) {
 }
 
 export async function addRecipeAction(formData: FormData) {
-  await actor();
+  try {
+    await actor("menu");
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/menu", error.message);
+    throw error;
+  }
   const parentId = String(formData.get("parentId") ?? "");
   const ingredientId = String(formData.get("ingredientId") ?? "");
   const qty = parseQtyToMilli(String(formData.get("qty") ?? ""));
@@ -231,9 +260,9 @@ export async function addRecipeAction(formData: FormData) {
 }
 
 export async function removeRecipeAction(formData: FormData) {
-  await actor();
   const recipeLineId = String(formData.get("recipeLineId") ?? "");
   try {
+    await actor("menu");
     removeRecipeLine(getDb(), recipeLineId);
   } catch (error) {
     if (error instanceof BusinessError) bounce("/menu", error.message);
@@ -244,7 +273,12 @@ export async function removeRecipeAction(formData: FormData) {
 }
 
 export async function adjustStockAction(formData: FormData) {
-  await actor();
+  try {
+    await actor("stock");
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/stock", error.message);
+    throw error;
+  }
   const itemId = String(formData.get("itemId") ?? "");
   const qty = parseQtyToMilli(String(formData.get("qty") ?? ""));
   const note = String(formData.get("note") ?? "");
@@ -280,32 +314,45 @@ export async function logoutAction() {
 }
 
 export async function changePinAction(formData: FormData) {
-  const staff = await actor();
-  if (staff.role !== "cashier") bounce("/staff", "Μόνο το ταμείο αλλάζει κωδικούς.");
+  await administrator();
   const staffId = String(formData.get("staffId") ?? "");
   const pin = String(formData.get("pin") ?? "");
   try {
     changeStaffPin(getDb(), staffId, pin);
   } catch (error) {
-    if (error instanceof BusinessError) bounce("/staff", error.message);
+    if (error instanceof BusinessError) bounce("/settings", error.message);
     throw error;
   }
-  revalidatePath("/staff");
-  redirect("/staff");
+  revalidatePath("/settings");
+  redirect("/settings");
+}
+
+export async function savePermissionsAction(formData: FormData) {
+  await administrator();
+  const staffId = String(formData.get("staffId") ?? "");
+  const permissions = formData.getAll("permission").map(String).filter(isPermission);
+  try {
+    setStaffPermissions(getDb(), staffId, permissions);
+  } catch (error) {
+    if (error instanceof BusinessError) bounce("/settings", error.message);
+    throw error;
+  }
+  revalidatePath("/settings");
+  redirect("/settings");
 }
 
 export async function createStaffAction(formData: FormData) {
-  const staff = await actor();
-  if (staff.role !== "cashier") bounce("/staff", "Μόνο το ταμείο αλλάζει κωδικούς.");
+  await administrator();
   const name = String(formData.get("name") ?? "");
   const pin = String(formData.get("pin") ?? "");
   const role = String(formData.get("role") ?? "") === "cashier" ? "cashier" : "waiter";
+  const permissions = formData.getAll("permission").map(String).filter(isPermission);
   try {
-    createStaff(getDb(), getCompany(getDb()).id, name, pin, role);
+    createStaff(getDb(), getCompany(getDb()).id, name, pin, role, permissions);
   } catch (error) {
-    if (error instanceof BusinessError) bounce("/staff", error.message);
+    if (error instanceof BusinessError) bounce("/settings", error.message);
     throw error;
   }
-  revalidatePath("/staff");
-  redirect("/staff");
+  revalidatePath("/settings");
+  redirect("/settings");
 }

@@ -1,4 +1,5 @@
 import type { VatBucket } from "./money";
+import type { Permission } from "./permissions";
 
 export type FloorTable = {
   id: string;
@@ -67,13 +68,14 @@ export type PaymentRow = {
   staffName: string | null;
 };
 
-export type StaffRole = "waiter" | "cashier";
+export type StaffRole = "waiter" | "cashier" | "admin";
 
 export type StaffMember = {
   id: string;
   name: string;
   pin: string;
   role: StaffRole;
+  permissions: Permission[];
 };
 
 export type Ticket = {

@@ -117,6 +117,17 @@ a { color: inherit; }
   background: var(--surface);
 }
 .demo-pins { margin-top: 18px; }
+.rights { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.rights label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.rights small { display: block; color: var(--faint); font-size: 12px; }
 .shift-pill em { color: var(--ok); font-style: normal; font-weight: 650; }
 .page { padding: 22px; max-width: 1280px; margin: 0 auto; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }

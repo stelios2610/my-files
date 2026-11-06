@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Denied } from "@/components/denied";
 import { MenuPicker } from "@/components/menu-picker";
 import {
   addPaymentAction,
@@ -8,7 +9,9 @@ import {
   setLineQtyAction,
   voidDocumentAction,
 } from "@/lib/actions";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
+import { allows } from "@/lib/permissions";
 import { formatAmountInput, formatEuro, formatRate, formatTime } from "@/lib/money";
 import { getCompany, getMenu, getOpenTicketByTable, getTableName } from "@/lib/repo";
 
@@ -19,6 +22,9 @@ export default async function TablePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string; change?: string; paid?: string }>;
 }) {
+  const staff = await requirePermission("order");
+  if (!staff) return <Denied />;
+  const canPay = allows(staff, "pay");
   const { id } = await params;
   const query = await searchParams;
   const db = getDb();
@@ -128,18 +134,23 @@ export default async function TablePage({
                       {payment.method === "cash" ? "Μετρητά" : "Κάρτα"} {formatEuro(payment.amount)}
                       {payment.staffName ? ` · ${payment.staffName}` : ""}
                     </span>
-                    <form action={removePaymentAction}>
-                      <input type="hidden" name="paymentId" value={payment.id} />
-                      <input type="hidden" name="tableId" value={ticket.tableId} />
-                      <button className="ghost" type="submit">
-                        Αφαίρεση
-                      </button>
-                    </form>
+                    {canPay ? (
+                      <form action={removePaymentAction}>
+                        <input type="hidden" name="paymentId" value={payment.id} />
+                        <input type="hidden" name="tableId" value={ticket.tableId} />
+                        <button className="ghost" type="submit">
+                          Αφαίρεση
+                        </button>
+                      </form>
+                    ) : null}
                   </div>
                 ))}
               </div>
             ) : null}
-            {ticket.lines.length > 0 && ticket.remaining > 0 ? (
+            {!canPay && ticket.lines.length > 0 ? (
+              <p className="note">Την είσπραξη την κλείνει όποιος έχει αυτό το δικαίωμα.</p>
+            ) : null}
+            {canPay && ticket.lines.length > 0 && ticket.remaining > 0 ? (
               <form className="pay" action={addPaymentAction}>
                 <input type="hidden" name="documentId" value={ticket.documentId} />
                 <input type="hidden" name="tableId" value={ticket.tableId} />
@@ -164,7 +175,7 @@ export default async function TablePage({
                 </div>
               </form>
             ) : null}
-            {ticket.lines.length > 0 && ticket.remaining === 0 ? (
+            {canPay && ticket.lines.length > 0 && ticket.remaining === 0 ? (
               <form className="pay" action={closeDocumentAction}>
                 <input type="hidden" name="documentId" value={ticket.documentId} />
                 <input type="hidden" name="tableId" value={ticket.tableId} />

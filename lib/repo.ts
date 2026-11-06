@@ -7,6 +7,7 @@ import {
   minutesOpen,
   summarizeLines,
 } from "./money";
+import { isPermission, parsePermissions } from "./permissions";
 import type { DB } from "./sqlite";
 import type {
   CompanyInfo,
@@ -1049,14 +1050,15 @@ export function exportRows(db: DB, companyId: string): ExportRow[] {
   });
 }
 
-function mapStaff(row: { id: string; name: string; pin: string; role: string }): StaffMember {
-  return { id: row.id, name: row.name, pin: row.pin, role: row.role === "cashier" ? "cashier" : "waiter" };
+function mapStaff(row: { id: string; name: string; pin: string; role: string; permissions: string | null }): StaffMember {
+  const role = row.role === "admin" || row.role === "cashier" ? row.role : "waiter";
+  return { id: row.id, name: row.name, pin: row.pin, role, permissions: parsePermissions(row.permissions) };
 }
 
 export function staffByPin(db: DB, companyId: string, pin: string): StaffMember | null {
-  const row = one<{ id: string; name: string; pin: string; role: string }>(
+  const row = one<{ id: string; name: string; pin: string; role: string; permissions: string | null }>(
     db,
-    "SELECT id, name, pin, role FROM staff WHERE company_id = ? AND pin = ? AND active = 1",
+    "SELECT id, name, pin, role, permissions FROM staff WHERE company_id = ? AND pin = ? AND active = 1",
     companyId,
     pin,
   );
@@ -1070,9 +1072,9 @@ export function createStaffSession(db: DB, staffId: string): string {
 }
 
 export function staffBySession(db: DB, token: string): StaffMember | null {
-  const row = one<{ id: string; name: string; pin: string; role: string }>(
+  const row = one<{ id: string; name: string; pin: string; role: string; permissions: string | null }>(
     db,
-    `SELECT s.id, s.name, s.pin, s.role
+    `SELECT s.id, s.name, s.pin, s.role, s.permissions
      FROM staff_session session
      JOIN staff s ON s.id = session.staff_id
      WHERE session.token = ? AND s.active = 1`,
@@ -1086,15 +1088,18 @@ export function deleteSession(db: DB, token: string): void {
 }
 
 export function listStaff(db: DB, companyId: string): StaffMember[] {
-  return many<{ id: string; name: string; pin: string; role: string }>(
+  return many<{ id: string; name: string; pin: string; role: string; permissions: string | null }>(
     db,
-    "SELECT id, name, pin, role FROM staff WHERE company_id = ? AND active = 1 ORDER BY role DESC, name",
+    `SELECT id, name, pin, role, permissions FROM staff
+     WHERE company_id = ? AND active = 1
+     ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'cashier' THEN 1 ELSE 2 END, name`,
     companyId,
   ).map(mapStaff);
 }
 
 export function demoPins(db: DB): { name: string; pin: string }[] | null {
   const expected = [
+    { id: "staff_admin", name: "Υπεύθυνος", pin: "8024" },
     { id: "staff_maria", name: "Μαρία", pin: "2580" },
     { id: "staff_nikos", name: "Νίκος", pin: "1470" },
     { id: "staff_till", name: "Ταμείο", pin: "3690" },
@@ -1124,18 +1129,30 @@ export function changeStaffPin(db: DB, staffId: string, pin: string): void {
   db.prepare("UPDATE staff SET pin = ? WHERE id = ?").run(pin, staffId);
 }
 
-export function createStaff(db: DB, companyId: string, name: string, pin: string, role: StaffRole): void {
+export function createStaff(
+  db: DB,
+  companyId: string,
+  name: string,
+  pin: string,
+  role: Exclude<StaffRole, "admin">,
+  permissions: string[],
+): void {
   const cleanName = name.trim();
   if (cleanName.length < 2 || cleanName.length > 40) throw new BusinessError("Γράψε όνομα, μέχρι 40 γράμματα.");
   assertPin(pin);
   if (role !== "waiter" && role !== "cashier") throw new BusinessError("Άκυρος ρόλος.");
   const taken = one<{ id: string }>(db, "SELECT id FROM staff WHERE company_id = ? AND pin = ?", companyId, pin);
   if (taken) throw new BusinessError("Αυτός ο κωδικός χρησιμοποιείται.");
-  db.prepare("INSERT INTO staff (id, company_id, name, pin, role, active) VALUES (?, ?, ?, ?, ?, 1)").run(
-    randomUUID(),
-    companyId,
-    cleanName,
-    pin,
-    role,
-  );
+  const clean = [...new Set(permissions.filter(isPermission))];
+  db.prepare(
+    "INSERT INTO staff (id, company_id, name, pin, role, active, permissions) VALUES (?, ?, ?, ?, ?, 1, ?)",
+  ).run(randomUUID(), companyId, cleanName, pin, role, clean.join(","));
+}
+
+export function setStaffPermissions(db: DB, staffId: string, permissions: string[]): void {
+  const person = one<{ role: string }>(db, "SELECT role FROM staff WHERE id = ? AND active = 1", staffId);
+  if (!person) throw new BusinessError("Δεν υπάρχει αυτό το άτομο.");
+  if (person.role === "admin") throw new BusinessError("Ο υπεύθυνος έχει πάντα όλα τα δικαιώματα.");
+  const clean = [...new Set(permissions.filter(isPermission))];
+  db.prepare("UPDATE staff SET permissions = ? WHERE id = ?").run(clean.join(","), staffId);
 }
