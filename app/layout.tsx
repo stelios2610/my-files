@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
-import { getDb } from "@/lib/db";
-import { getCompany } from "@/lib/repo";
+import { APP_NAME } from "@/lib/brand";
 
 const sans = Source_Sans_3({
   subsets: ["latin", "greek"],
@@ -18,10 +17,10 @@ const serif = Source_Serif_4({
 
 export const dynamic = "force-dynamic";
 
-export function generateMetadata(): Metadata {
-  const company = getCompany(getDb());
-  return { title: company.name, description: "Όροφος, παραστατικά και αποθήκη" };
-}
+export const metadata: Metadata = {
+  title: APP_NAME,
+  description: "Όροφος, παραστατικά και αποθήκη",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

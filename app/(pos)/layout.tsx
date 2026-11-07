@@ -5,6 +5,7 @@ import { logoutAction } from "@/lib/actions";
 import { currentStaff } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { formatEuro, formatTime } from "@/lib/money";
+import { APP_NAME } from "@/lib/brand";
 import { allows, NAV_LINKS } from "@/lib/permissions";
 import { getCompany, getOpenShift, pendingFiscalCount } from "@/lib/repo";
 
@@ -25,7 +26,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
     <div className="app">
       <header className="topbar">
         <Link href="/" className="brand">
-          <strong>{company.name}</strong>
+          <strong>{APP_NAME}</strong>
           <span>Όροφος · αποθήκη · βάρδια</span>
         </Link>
         <Nav pending={pending} items={items} />

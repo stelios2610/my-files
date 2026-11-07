@@ -52,6 +52,7 @@ a { color: inherit; }
 }
 .brand { display: flex; flex-direction: column; min-width: 140px; text-decoration: none; }
 .brand strong {
+  letter-spacing: 0.08em;
   font-family: var(--font-serif), Georgia, serif;
   font-size: 22px;
   font-weight: 700;
@@ -97,6 +98,7 @@ a { color: inherit; }
 .brand-mark {
   font-family: var(--font-serif), Georgia, serif;
   font-size: 28px;
+  letter-spacing: 0.14em;
   margin: 0 0 8px;
 }
 .pin-pad { width: min(320px, 100%); display: grid; gap: 14px; }

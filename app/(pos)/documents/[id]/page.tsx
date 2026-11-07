@@ -4,6 +4,7 @@ import { markFiscalSentAction } from "@/lib/actions";
 import { Denied } from "@/components/denied";
 import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
+import { APP_NAME } from "@/lib/brand";
 import { formatDateTime, formatEuro, formatRate } from "@/lib/money";
 import { getCompany, getFiscalHandoff, getTicket } from "@/lib/repo";
 
@@ -30,7 +31,7 @@ export default async function DocumentPage({
       </p>
       <article className="slip">
         <header>
-          <h1>{company.name}</h1>
+          <h1>{APP_NAME}</h1>
           <p>
             {company.address}
             <br />
